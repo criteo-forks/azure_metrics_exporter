@@ -1,16 +1,15 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
-
+	//"github.com/Azure/azure-sdk-for-go/profiles/2017-03-09/resources/mgmt/resources"
+	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
+	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/RobustPerception/azure_metrics_exporter/config"
 )
 
@@ -67,6 +66,7 @@ type AzureMetricValueResponse struct {
 // AzureClient represents our client to talk to the Azure api
 type AzureClient struct {
 	client               *http.Client
+	authorizer           autorest.Authorizer
 	accessToken          string
 	accessTokenExpiresOn time.Time
 }
@@ -80,138 +80,58 @@ func NewAzureClient() *AzureClient {
 	}
 }
 
-func (ac *AzureClient) getAccessToken() error {
-	target := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/token", sc.C.Credentials.TenantID)
-	form := url.Values{
-		"grant_type":    {"client_credentials"},
-		"resource":      {"https://management.azure.com/"},
-		"client_id":     {sc.C.Credentials.ClientID},
-		"client_secret": {sc.C.Credentials.ClientSecret},
-	}
-	resp, err := ac.client.PostForm(target, form)
+func (ac *AzureClient) getAuthorizer() error {
+	var err error
+	ac.authorizer, err = auth.NewAuthorizerFromEnvironment()
+        fmt.Printf("%v",ac.authorizer)
 	if err != nil {
-		return fmt.Errorf("Error authenticating against Azure API: %v", err)
+		return fmt.Errorf("Error getting authorizer: %v", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("Did not get status code 200, got: %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("Error reading body of response: %v", err)
-	}
-	var data map[string]interface{}
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		return fmt.Errorf("Error unmarshalling response body: %v", err)
-	}
-	ac.accessToken = data["access_token"].(string)
-	expiresOn, err := strconv.ParseInt(data["expires_on"].(string), 10, 64)
-	if err != nil {
-		return fmt.Errorf("Error ParseInt of expires_on failed: %v", err)
-	}
-	ac.accessTokenExpiresOn = time.Unix(expiresOn, 0).UTC()
-
 	return nil
 }
 
-// Loop through all specified resource targets and get their respective metric definitions.
-func (ac *AzureClient) getMetricDefinitions() (map[string]AzureMetricDefinitionResponse, error) {
-	apiVersion := "2018-01-01"
-	definitions := make(map[string]AzureMetricDefinitionResponse)
+func (ac *AzureClient) getMetricDefinitions() (map[string]insights.MetricDefinitionCollection, error) {
+	definitions := make(map[string]insights.MetricDefinitionCollection)
+
+        // TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
+        client := insights.NewMetricDefinitionsClient(sc.C.Credentials.SubscriptionID)
+        client.Authorizer = ac.authorizer
+        client.AddToUserAgent("azure_prometheus_exporter")
 
 	for _, target := range sc.C.Targets {
-		metricsResource := fmt.Sprintf("subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
-		metricsTarget := fmt.Sprintf("https://management.azure.com/%s/providers/microsoft.insights/metricDefinitions?api-version=%s", metricsResource, apiVersion)
-		req, err := http.NewRequest("GET", metricsTarget, nil)
+		metricsResource := fmt.Sprintf("/subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
+
+                var def insights.MetricDefinitionCollection
+                var err error
+                def, err = client.List(context.Background(), metricsResource, "")
 		if err != nil {
-			return nil, fmt.Errorf("Error creating HTTP request: %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+ac.accessToken)
-		resp, err := ac.client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("Error: %v", err)
-		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("Error reading body of response: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("Error: %v", string(body))
+			return nil, fmt.Errorf("Error retrieving metric definitions: %v", err)
 		}
 
-		def := AzureMetricDefinitionResponse{}
-		err = json.Unmarshal(body, &def)
-		if err != nil {
-			return nil, fmt.Errorf("Error unmarshalling response body: %v", err)
-		}
 		definitions[target.Resource] = def
 	}
 	return definitions, nil
 }
 
-func (ac *AzureClient) getMetricValue(metricNames string, target config.Target) (AzureMetricValueResponse, error) {
-	apiVersion := "2018-01-01"
-	now := time.Now().UTC()
-	refreshAt := ac.accessTokenExpiresOn.Add(-10 * time.Minute)
-	if now.After(refreshAt) {
-		err := ac.getAccessToken()
-		if err != nil {
-			return AzureMetricValueResponse{}, fmt.Errorf("Error refreshing access token: %v", err)
-		}
-	}
-
-	metricsResource := fmt.Sprintf("subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
+func (ac *AzureClient) getMetricValue(metricNames []string, target config.Target) (insights.Response, error) {
+	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
+        client := insights.NewMetricsClient(sc.C.Credentials.SubscriptionID)
+	client.Authorizer = ac.authorizer
+        client.AddToUserAgent("azure_prometheus_exporter")
 	endTime, startTime := GetTimes()
-
-	metricValueEndpoint := fmt.Sprintf("https://management.azure.com/%s/providers/microsoft.insights/metrics", metricsResource)
-
-	req, err := http.NewRequest("GET", metricValueEndpoint, nil)
-	if err != nil {
-		return AzureMetricValueResponse{}, fmt.Errorf("Error creating HTTP request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+ac.accessToken)
-
-	values := url.Values{}
-	if metricNames != "" {
-		values.Add("metricnames", metricNames)
-	}
+	timespan := fmt.Sprintf("%s/%s", startTime, endTime)
+        var aggregations string
 	if len(target.Aggregations) > 0 {
-		values.Add("aggregation", strings.Join(target.Aggregations, ","))
+		aggregations = strings.Join(target.Aggregations, ",")
 	} else {
-		values.Add("aggregation", "Total,Average,Minimum,Maximum")
+		aggregations = "Total,Average,Minimum,Maximum"
 	}
-	values.Add("timespan", fmt.Sprintf("%s/%s", startTime, endTime))
-	values.Add("api-version", apiVersion)
-
-	req.URL.RawQuery = values.Encode()
-
-	log.Printf("GET %s", req.URL)
-	resp, err := ac.client.Do(req)
+        resourceUri := fmt.Sprintf("/subscriptions/%s%s",sc.C.Credentials.SubscriptionID,target.Resource)
+        fmt.Printf(resourceUri)
+	result, err := client.List(context.Background(), resourceUri, timespan, nil, strings.Join(metricNames, ","), aggregations, nil, "", "", insights.Data, "")
 	if err != nil {
-		return AzureMetricValueResponse{}, fmt.Errorf("Error: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return AzureMetricValueResponse{}, fmt.Errorf("Unable to query metrics API with status code: %d", resp.StatusCode)
+		return insights.Response{}, fmt.Errorf("Error retrieving metrics: %v", err)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return AzureMetricValueResponse{}, fmt.Errorf("Error reading body of response: %v", err)
-	}
-
-	var data AzureMetricValueResponse
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		return AzureMetricValueResponse{}, fmt.Errorf("Error unmarshalling response body: %v", err)
-	}
-
-	if data.APIError.Code != "" {
-		return AzureMetricValueResponse{}, fmt.Errorf("Metrics API returned error: %s - %v", data.APIError.Code, data.APIError.Message)
-	}
-
-	return data, nil
+	return result, nil
 }

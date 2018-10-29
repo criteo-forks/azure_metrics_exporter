@@ -38,6 +38,10 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- prometheus.NewDesc("dummy", "dummy", nil, nil)
 }
 
+//func listOfResources(target Target) []Resources {
+//
+//}
+
 // Collect - collect results from Azure Montior API and create Prometheus metrics.
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	// Get metric values for all defined metrics
@@ -46,36 +50,35 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		for _, metric := range target.Metrics {
 			metrics = append(metrics, metric.Name)
 		}
-		metricsStr := strings.Join(metrics, ",")
-		metricValueData, err := ac.getMetricValue(metricsStr, target)
+		metricValueData, err := ac.getMetricValue(metrics, target)
 		if err != nil {
 			log.Printf("Failed to get metrics for target %s: %v", target.Resource, err)
 			continue
 		}
 
-		if len(metricValueData.Value) == 0 || len(metricValueData.Value[0].Timeseries) == 0 {
-			log.Printf("Metric %v not found at target %v\n", metricsStr, target.Resource)
+		if len(*metricValueData.Value) == 0 || len(*(*metricValueData.Value)[0].Timeseries) == 0 {
+			log.Printf("Metric %v not found at target %v\n", metrics, target.Resource)
 			continue
 		}
-		if len(metricValueData.Value[0].Timeseries[0].Data) == 0 {
-			log.Printf("No metric data returned for metric %v at target %v\n", metricsStr, target.Resource)
+		if len(*(*(*metricValueData.Value)[0].Timeseries)[0].Data) == 0 {
+			log.Printf("No metric data returned for metric %v at target %v\n", metrics, target.Resource)
 			continue
 		}
 
-		for _, value := range metricValueData.Value {
+		for _, value := range *metricValueData.Value {
 			// Ensure Azure metric names conform to Prometheus metric name conventions
-			metricName := strings.Replace(value.Name.Value, " ", "_", -1)
-			metricName = strings.ToLower(metricName + "_" + value.Unit)
+			metricName := strings.Replace(*value.Name.Value, " ", "_", -1)
+			metricName = strings.ToLower(metricName + "_" + string(value.Unit))
 			metricName = strings.Replace(metricName, "/", "_per_", -1)
 			metricName = invalidMetricChars.ReplaceAllString(metricName, "_")
-			metricValue := value.Timeseries[0].Data[len(value.Timeseries[0].Data)-1]
-			labels := CreateResourceLabels(value.ID)
+			metricValue := (*(*value.Timeseries)[0].Data)[len(*(*value.Timeseries)[0].Data)-1]
+			labels := CreateResourceLabels(*value.ID)
 
 			if hasAggregation(target, "Total") {
 				ch <- prometheus.MustNewConstMetric(
 					prometheus.NewDesc(metricName+"_total", metricName+"_total", nil, labels),
 					prometheus.GaugeValue,
-					metricValue.Total,
+					*metricValue.Total,
 				)
 			}
 
@@ -83,7 +86,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					prometheus.NewDesc(metricName+"_average", metricName+"_average", nil, labels),
 					prometheus.GaugeValue,
-					metricValue.Average,
+					*metricValue.Average,
 				)
 			}
 
@@ -92,7 +95,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					prometheus.NewDesc(metricName+"_min", metricName+"_min", nil, labels),
 					prometheus.GaugeValue,
-					metricValue.Minimum,
+					*metricValue.Minimum,
 				)
 			}
 
@@ -100,7 +103,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					prometheus.NewDesc(metricName+"_max", metricName+"_max", nil, labels),
 					prometheus.GaugeValue,
-					metricValue.Maximum,
+					*metricValue.Maximum,
 				)
 			}
 		}
@@ -123,7 +126,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err := ac.getAccessToken()
+	err := ac.getAuthorizer()
 	if err != nil {
 		log.Fatalf("Failed to get token: %v", err)
 	}
@@ -137,8 +140,8 @@ func main() {
 
 		for k, v := range results {
 			log.Printf("Resource: %s\n\nAvailable Metrics:\n", strings.Split(k, "/")[6])
-			for _, r := range v.MetricDefinitionResponses {
-				log.Printf("- %s\n", r.Name.Value)
+			for _, r := range *v.Value {
+				log.Printf("- %s\n", *r.Name.Value)
 			}
 		}
 		os.Exit(0)
