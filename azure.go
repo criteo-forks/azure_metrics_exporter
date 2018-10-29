@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
 	//"github.com/Azure/azure-sdk-for-go/profiles/2017-03-09/resources/mgmt/resources"
 	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
 	"github.com/Azure/go-autorest/autorest"
@@ -13,70 +11,14 @@ import (
 	"github.com/RobustPerception/azure_metrics_exporter/config"
 )
 
-// AzureMetricDefinitionResponse represents metric definition response for a given resource from Azure.
-type AzureMetricDefinitionResponse struct {
-	MetricDefinitionResponses []metricDefinitionResponse `json:"value"`
-}
-type metricDefinitionResponse struct {
-	Dimensions []struct {
-		LocalizedValue string `json:"localizedValue"`
-		Value          string `json:"value"`
-	} `json:"dimensions"`
-	ID                   string `json:"id"`
-	IsDimensionRequired  bool   `json:"isDimensionRequired"`
-	MetricAvailabilities []struct {
-		Retention string `json:"retention"`
-		TimeGrain string `json:"timeGrain"`
-	} `json:"metricAvailabilities"`
-	Name struct {
-		LocalizedValue string `json:"localizedValue"`
-		Value          string `json:"value"`
-	} `json:"name"`
-	PrimaryAggregationType string `json:"primaryAggregationType"`
-	ResourceID             string `json:"resourceId"`
-	Unit                   string `json:"unit"`
-}
-
-// AzureMetricValueResponse represents a metric value response for a given metric definition.
-type AzureMetricValueResponse struct {
-	Value []struct {
-		Timeseries []struct {
-			Data []struct {
-				TimeStamp string  `json:"timeStamp"`
-				Total     float64 `json:"total"`
-				Average   float64 `json:"average"`
-				Minimum   float64 `json:"minimum"`
-				Maximum   float64 `json:"maximum"`
-			} `json:"data"`
-		} `json:"timeseries"`
-		ID   string `json:"id"`
-		Name struct {
-			LocalizedValue string `json:"localizedValue"`
-			Value          string `json:"value"`
-		} `json:"name"`
-		Type string `json:"type"`
-		Unit string `json:"unit"`
-	} `json:"value"`
-	APIError struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 // AzureClient represents our client to talk to the Azure api
 type AzureClient struct {
-	client               *http.Client
 	authorizer           autorest.Authorizer
-	accessToken          string
-	accessTokenExpiresOn time.Time
 }
 
 // NewAzureClient returns an Azure client to talk the Azure API
 func NewAzureClient() *AzureClient {
 	return &AzureClient{
-		client:               &http.Client{},
-		accessToken:          "",
-		accessTokenExpiresOn: time.Time{},
 	}
 }
 
