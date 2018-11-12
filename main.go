@@ -1,16 +1,17 @@
 package main
 
 import (
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
+	"github.com/RobustPerception/azure_metrics_exporter/config"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/version"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
-
-	"github.com/RobustPerception/azure_metrics_exporter/config"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/version"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -38,9 +39,64 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- prometheus.NewDesc("dummy", "dummy", nil, nil)
 }
 
-//func listOfResources(target Target) []Resources {
-//
-//}
+func (c *Collector) processMetricData(target config.Target, resourceID string, metricData insights.Response, err error, ch chan<- prometheus.Metric) {
+	if err != nil {
+		log.Printf("Failed to get metrics for target %s: %v", resourceID, err)
+		return
+	}
+
+	if len(*metricData.Value) == 0 || len(*(*metricData.Value)[0].Timeseries) == 0 {
+		log.Printf("Metrics not found for target %v\n", resourceID)
+		return
+	}
+	if len(*(*(*metricData.Value)[0].Timeseries)[0].Data) == 0 {
+		log.Printf("No metric data returned for target %v\n", resourceID)
+		return
+	}
+
+	for _, value := range *metricData.Value {
+		// Ensure Azure metric names conform to Prometheus metric name conventions
+		metricName := strings.Replace(*value.Name.Value, " ", "_", -1)
+		metricName = strings.ToLower(metricName + "_" + string(value.Unit))
+		metricName = strings.Replace(metricName, "/", "_per_", -1)
+		metricName = invalidMetricChars.ReplaceAllString(metricName, "_")
+		metricValue := (*(*value.Timeseries)[0].Data)[len(*(*value.Timeseries)[0].Data)-1]
+		labels := CreateResourceLabels(*value.ID)
+
+		if hasAggregation(target, "Total") {
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(metricName+"_total", metricName+"_total", nil, labels),
+				prometheus.GaugeValue,
+				*metricValue.Total,
+			)
+		}
+
+		if hasAggregation(target, "Average") {
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(metricName+"_average", metricName+"_average", nil, labels),
+				prometheus.GaugeValue,
+				*metricValue.Average,
+			)
+		}
+
+		if hasAggregation(target, "Minimum") {
+
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(metricName+"_min", metricName+"_min", nil, labels),
+				prometheus.GaugeValue,
+				*metricValue.Minimum,
+			)
+		}
+
+		if hasAggregation(target, "Maximum") {
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(metricName+"_max", metricName+"_max", nil, labels),
+				prometheus.GaugeValue,
+				*metricValue.Maximum,
+			)
+		}
+	}
+}
 
 // Collect - collect results from Azure Montior API and create Prometheus metrics.
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
@@ -50,62 +106,27 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		for _, metric := range target.Metrics {
 			metrics = append(metrics, metric.Name)
 		}
-		metricValueData, err := ac.getMetricValue(metrics, target)
-		if err != nil {
-			log.Printf("Failed to get metrics for target %s: %v", target.Resource, err)
+		var resourceIdList []string
+		var err error
+		fmt.Printf("Resource: %v Search: %v", target.Resource, target.Search)
+		if len(target.Resource) > 0 {
+			fmt.Println("Use one resource")
+			resourceId := fmt.Sprintf("/subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
+			resourceIdList = make([]string, 1)
+			resourceIdList[0] = resourceId
+		} else if len(target.Search) > 0 {
+			fmt.Println("Searching for resources...")
+			resourceIdList, err = ac.getResources(target.Search)
+			if err != nil {
+				fmt.Errorf("Failed to get resources for search pattern \"%v\": %v ", target.Search, err)
+			}
+		} else {
 			continue
 		}
-
-		if len(*metricValueData.Value) == 0 || len(*(*metricValueData.Value)[0].Timeseries) == 0 {
-			log.Printf("Metric %v not found at target %v\n", metrics, target.Resource)
-			continue
-		}
-		if len(*(*(*metricValueData.Value)[0].Timeseries)[0].Data) == 0 {
-			log.Printf("No metric data returned for metric %v at target %v\n", metrics, target.Resource)
-			continue
-		}
-
-		for _, value := range *metricValueData.Value {
-			// Ensure Azure metric names conform to Prometheus metric name conventions
-			metricName := strings.Replace(*value.Name.Value, " ", "_", -1)
-			metricName = strings.ToLower(metricName + "_" + string(value.Unit))
-			metricName = strings.Replace(metricName, "/", "_per_", -1)
-			metricName = invalidMetricChars.ReplaceAllString(metricName, "_")
-			metricValue := (*(*value.Timeseries)[0].Data)[len(*(*value.Timeseries)[0].Data)-1]
-			labels := CreateResourceLabels(*value.ID)
-
-			if hasAggregation(target, "Total") {
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(metricName+"_total", metricName+"_total", nil, labels),
-					prometheus.GaugeValue,
-					*metricValue.Total,
-				)
-			}
-
-			if hasAggregation(target, "Average") {
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(metricName+"_average", metricName+"_average", nil, labels),
-					prometheus.GaugeValue,
-					*metricValue.Average,
-				)
-			}
-
-			if hasAggregation(target, "Minimum") {
-
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(metricName+"_min", metricName+"_min", nil, labels),
-					prometheus.GaugeValue,
-					*metricValue.Minimum,
-				)
-			}
-
-			if hasAggregation(target, "Maximum") {
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(metricName+"_max", metricName+"_max", nil, labels),
-					prometheus.GaugeValue,
-					*metricValue.Maximum,
-				)
-			}
+		fmt.Printf("Resources: %v", resourceIdList)
+		for _, resourceID := range resourceIdList {
+			metricValueData, err := ac.getMetricValue(metrics, target, resourceID)
+			c.processMetricData(target, resourceID, metricValueData, err, ch)
 		}
 	}
 }

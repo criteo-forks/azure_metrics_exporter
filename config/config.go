@@ -52,6 +52,13 @@ var validAggregations = []string{"Total", "Average", "Minimum", "Maximum"}
 
 func (c *Config) Validate() (err error) {
 	for _, t := range c.Targets {
+                if len(t.Resource) == 0 && len(t.Search) == 0 {
+                        fmt.Errorf("A resource or search criteria must always be set.")
+                }
+               	if len(t.Search) == 0 && !strings.HasPrefix(t.Resource, "/") {
+			return fmt.Errorf("Resource path %q must start with a /", t.Resource)
+		}
+
 		for _, a := range t.Aggregations {
 			ok := false
 			for _, valid := range validAggregations {
@@ -65,9 +72,6 @@ func (c *Config) Validate() (err error) {
 			}
 		}
 
-		if !strings.HasPrefix(t.Resource, "/") {
-			return fmt.Errorf("Resource path %q must start with a /", t.Resource)
-		}
 	}
 	return nil
 }
@@ -84,7 +88,8 @@ type Credentials struct {
 
 // Target represents Azure target resource and its associated metric definitions
 type Target struct {
-	Resource     string   `yaml:"resource"`
+	Resource     string   `yaml:"resource",omitempty`
+        Search       string    `yaml:"search",omitempty`
 	Metrics      []Metric `yaml:"metrics"`
 	Aggregations []string `yaml:"aggregations"`
 
