@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
 	"github.com/RobustPerception/azure_metrics_exporter/config"
+	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -25,6 +27,7 @@ var (
 	listenAddress         = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9276").String()
 	listMetricDefinitions = kingpin.Flag("list.definitions", "List available metric definitions for the given resources and exit.").Bool()
 	invalidMetricChars    = regexp.MustCompile("[^a-zA-Z0-9_:]")
+	memcache              = cache.New(10*time.Minute, 60*time.Minute)
 )
 
 func init() {
@@ -125,7 +128,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		} else {
 			continue
 		}
-		fmt.Printf("Resources: %v", resourceIdList)
+		fmt.Printf("Resources: %v", len(resourceIdList))
 		for _, resourceID := range resourceIdList {
 			metricValueData, err := ac.getMetricValue(metrics, target, resourceID)
 			c.processMetricData(target, resourceID, metricValueData, err, ch)

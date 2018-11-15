@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/RobustPerception/azure_metrics_exporter/config"
+	"github.com/patrickmn/go-cache"
 	"strings"
 )
 
@@ -53,28 +54,37 @@ func (ac *AzureClient) getMetricDefinitions() (map[string]insights.MetricDefinit
 	return definitions, nil
 }
 func (ac *AzureClient) getResources(searchFilter string) ([]string, error) {
-	client := resources.NewClient(sc.C.Credentials.SubscriptionID)
-	client.Authorizer = ac.authorizer
-	client.AddToUserAgent("azure_prometheus_exporter")
+	cacheKey := "resources_" + searchFilter
 
-	result, err := client.ListComplete(context.Background(), searchFilter, "resourceTypes/ID", nil)
-	// TODO: Add Debug Logging
-	//fmt.Println("Result: %v", result)
-	//fmt.Println("Error: %v", err)
-	if err != nil {
-		return make([]string, 0), fmt.Errorf("Error retrieving resources: %v", err)
+	cachedValue, found := memcache.Get(cacheKey)
+	if found {
+		return *cachedValue.(*[]string), nil
+	} else {
+
+		client := resources.NewClient(sc.C.Credentials.SubscriptionID)
+		client.Authorizer = ac.authorizer
+		client.AddToUserAgent("azure_prometheus_exporter")
+
+		result, err := client.ListComplete(context.Background(), searchFilter, "resourceTypes/ID", nil)
+		// TODO: Add Debug Logging
+		//fmt.Println("Result: %v", result)
+		//fmt.Println("Error: %v", err)
+		if err != nil {
+			return make([]string, 0), fmt.Errorf("Error retrieving resources: %v", err)
+		}
+
+		var output = make([]string, 0)
+		//fmt.Println("Output: %v",result)
+		for result.NotDone() {
+			resource := result.Value()
+			//fmt.Println("Result: %v", resource)
+			output = append(output, *resource.ID)
+			result.Next()
+
+		}
+		memcache.Set(cacheKey, &output, cache.DefaultExpiration)
+		return output, nil
 	}
-
-	var output = make([]string, 0)
-	//fmt.Println("Output: %v",result)
-	for result.NotDone() {
-		resource := result.Value()
-		//fmt.Println("Result: %v", resource)
-		output = append(output, *resource.ID)
-		result.Next()
-
-	}
-	return output, nil
 }
 func (ac *AzureClient) getMetricValue(metricNames []string, target config.Target, resourceID string) (insights.Response, error) {
 	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
