@@ -4,11 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/RobustPerception/azure_metrics_exporter/config"
 )
+
+func GetSubscriptionID() string {
+	if len(sc.C.Credentials.SubscriptionID) > 0 {
+		fmt.Println("Using Subscription", sc.C.Credentials.SubscriptionID)
+		return sc.C.Credentials.SubscriptionID
+	} else {
+		fmt.Println("Using Subscription", os.Getenv("AZURE_SUBSCRIPTION_ID"))
+		return os.Getenv("AZURE_SUBSCRIPTION_ID")
+	}
+}
 
 // PrintPrettyJSON - Prints structs nicely for debugging.
 func PrintPrettyJSON(input map[string]interface{}) {
@@ -33,8 +44,14 @@ func GetTimes() (string, string) {
 // CreateResourceLabels - Returns resource labels for a give resource ID.
 func CreateResourceLabels(resourceID string) map[string]string {
 	labels := make(map[string]string)
-	labels["resource_group"] = strings.Split(resourceID, "/")[4]
-	labels["resource_name"] = strings.Split(resourceID, "/")[8]
+	tmp := strings.Split(resourceID, "/")
+	labels["subscription_id"] = tmp[2]
+	if subscription.DisplayName != nil {
+		labels["subscription_name"] = *subscription.DisplayName
+	}
+	labels["resource_group"] = tmp[4]
+	labels["provider"] = tmp[6]
+	labels["name"] = tmp[8]
 	return labels
 }
 

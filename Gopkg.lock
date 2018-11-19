@@ -10,10 +10,11 @@
   version = "v0.2.0"
 
 [[projects]]
-  digest = "1:9c26faef203066e2ff4bc9f7be90d1950b19953f90e738c78bfe73b090ebd78c"
+  digest = "1:22786e107e944109f7a00ea9f67548b3cc0aa12841079ff0b4d1d6604a478ca1"
   name = "github.com/Azure/azure-sdk-for-go"
   packages = [
     "services/preview/monitor/mgmt/2018-03-01/insights",
+    "services/resources/mgmt/2015-11-01/subscriptions",
     "services/resources/mgmt/2018-05-01/resources",
     "version",
   ]
@@ -344,6 +345,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights",
+    "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2015-11-01/subscriptions",
     "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2018-05-01/resources",
     "github.com/Azure/go-autorest/autorest",
     "github.com/Azure/go-autorest/autorest/azure/auth",

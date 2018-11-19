@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
+	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2015-11-01/subscriptions"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2018-05-01/resources"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/RobustPerception/azure_metrics_exporter/config"
 	"github.com/patrickmn/go-cache"
+        "log"
 	"strings"
 )
 
@@ -19,28 +21,52 @@ type AzureClient struct {
 
 // NewAzureClient returns an Azure client to talk the Azure API
 func NewAzureClient() *AzureClient {
-	return &AzureClient{}
+        output := &AzureClient{}
+        output.setupAuthorizer()
+
+	return output
 }
 
-func (ac *AzureClient) getAuthorizer() error {
+func (ac *AzureClient) setupAuthorizer() {
 	var err error
 	ac.authorizer, err = auth.NewAuthorizerFromEnvironment()
 	if err != nil {
-		return fmt.Errorf("Error getting authorizer: %v", err)
+		log.Fatalf("Error getting authorizer: %v", err)
 	}
-	return nil
+}
+
+func (ac *AzureClient) GetSubscription(subscriptionID string) (subscriptions.Subscription, error) {
+        cacheKey := "subscription_" + subscriptionID
+	cachedValue, found := memcache.Get(cacheKey)
+        log.Println("Getting Subscription Information")
+	if found {
+                log.Println("Cached Subscription Found")
+		return *cachedValue.(*subscriptions.Subscription), nil
+	} else {
+		client := subscriptions.NewClient()
+                client.Authorizer = ac.authorizer
+		result, err := client.Get(context.Background(), subscriptionID)
+		if err != nil {
+                        log.Fatalf("Error getting subscription details: %v", err)
+		}
+		// Subscription won't change as long as process is alive
+		memcache.Set(cacheKey, &result, cache.NoExpiration)
+
+                log.Printf("Subscription: %v", *result.ID)
+		return result, nil
+	}
 }
 
 func (ac *AzureClient) getMetricDefinitions() (map[string]insights.MetricDefinitionCollection, error) {
 	definitions := make(map[string]insights.MetricDefinitionCollection)
 
 	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
-	client := insights.NewMetricDefinitionsClient(sc.C.Credentials.SubscriptionID)
+	client := insights.NewMetricDefinitionsClient(*subscription.SubscriptionID)
 	client.Authorizer = ac.authorizer
 	client.AddToUserAgent("azure_prometheus_exporter")
 
 	for _, target := range sc.C.Targets {
-		metricsResource := fmt.Sprintf("/subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
+		metricsResource := fmt.Sprintf("%s%s", *subscription.ID, target.Resource)
 
 		var def insights.MetricDefinitionCollection
 		var err error
@@ -61,23 +87,18 @@ func (ac *AzureClient) getResources(searchFilter string) ([]string, error) {
 		return *cachedValue.(*[]string), nil
 	} else {
 
-		client := resources.NewClient(sc.C.Credentials.SubscriptionID)
+		client := resources.NewClient(*subscription.SubscriptionID)
 		client.Authorizer = ac.authorizer
 		client.AddToUserAgent("azure_prometheus_exporter")
 
 		result, err := client.ListComplete(context.Background(), searchFilter, "resourceTypes/ID", nil)
-		// TODO: Add Debug Logging
-		//fmt.Println("Result: %v", result)
-		//fmt.Println("Error: %v", err)
 		if err != nil {
 			return make([]string, 0), fmt.Errorf("Error retrieving resources: %v", err)
 		}
 
 		var output = make([]string, 0)
-		//fmt.Println("Output: %v",result)
 		for result.NotDone() {
 			resource := result.Value()
-			//fmt.Println("Result: %v", resource)
 			output = append(output, *resource.ID)
 			result.Next()
 
@@ -88,7 +109,7 @@ func (ac *AzureClient) getResources(searchFilter string) ([]string, error) {
 }
 func (ac *AzureClient) getMetricValue(metricNames []string, target config.Target, resourceID string) (insights.Response, error) {
 	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
-	client := insights.NewMetricsClient(sc.C.Credentials.SubscriptionID)
+	client := insights.NewMetricsClient(*subscription.SubscriptionID)
 	client.Authorizer = ac.authorizer
 	client.AddToUserAgent("azure_prometheus_exporter")
 	endTime, startTime := GetTimes()

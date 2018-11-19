@@ -19,15 +19,16 @@ import (
 )
 
 var (
-	sc = &config.SafeConfig{
+	memcache = cache.New(10*time.Minute, 60*time.Minute)
+	sc       = &config.SafeConfig{
 		C: &config.Config{},
 	}
 	ac                    = NewAzureClient()
+	subscription, _       = ac.GetSubscription(GetSubscriptionID())
 	configFile            = kingpin.Flag("config.file", "Azure exporter configuration file.").Default("azure.yml").String()
 	listenAddress         = kingpin.Flag("web.listen-address", "The address to listen on for HTTP requests.").Default(":9276").String()
 	listMetricDefinitions = kingpin.Flag("list.definitions", "List available metric definitions for the given resources and exit.").Bool()
 	invalidMetricChars    = regexp.MustCompile("[^a-zA-Z0-9_:]")
-	memcache              = cache.New(10*time.Minute, 60*time.Minute)
 )
 
 func init() {
@@ -113,14 +114,14 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		}
 		var resourceIdList []string
 		var err error
-		fmt.Printf("Resource: %v Search: %v", target.Resource, target.Search)
+		log.Printf("Resource: %v Search: %v", target.Resource, target.Search)
 		if len(target.Resource) > 0 {
-			fmt.Println("Use one resource")
-			resourceId := fmt.Sprintf("/subscriptions/%s%s", sc.C.Credentials.SubscriptionID, target.Resource)
+			log.Println("Use one resource")
+			resourceId := fmt.Sprintf("%s%s", *subscription.ID, target.Resource)
 			resourceIdList = make([]string, 1)
 			resourceIdList[0] = resourceId
 		} else if len(target.Search) > 0 {
-			fmt.Println("Searching for resources...")
+			log.Println("Searching for resources...")
 			resourceIdList, err = ac.getResources(target.Search)
 			if err != nil {
 				fmt.Errorf("Failed to get resources for search pattern \"%v\": %v ", target.Search, err)
@@ -128,7 +129,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		} else {
 			continue
 		}
-		fmt.Printf("Resources: %v", len(resourceIdList))
+		log.Printf("Resources: %v", len(resourceIdList))
 		for _, resourceID := range resourceIdList {
 			metricValueData, err := ac.getMetricValue(metrics, target, resourceID)
 			c.processMetricData(target, resourceID, metricValueData, err, ch)
@@ -145,16 +146,18 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
+	fmt.Println("Available Environment Variables")
+	for _, e := range os.Environ() {
+		pair := strings.Split(e, "=")
+		log.Println(pair[0])
+
+	}
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	if err := sc.ReloadConfig(*configFile); err != nil {
 		log.Fatalf("Error loading config: %v", err)
 		os.Exit(1)
-	}
-
-	err := ac.getAuthorizer()
-	if err != nil {
-		log.Fatalf("Failed to get token: %v", err)
 	}
 
 	// Print list of available metric definitions for each resource to console if specified.
