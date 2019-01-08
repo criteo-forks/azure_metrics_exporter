@@ -7,5 +7,27 @@ sudo: false
 install: true
 
 script:
- - find . -type f \( -name "*go" -o -name ".promu.yml" \) | xargs sed 's|github.com/RobustPerception/azure_metrics_exporter|github.com/criteo-forks/azure_metrics_exporter|' -i
- - make
+  - make
+
+script:
+  - find . -type f \( -name "*go" -o -name ".promu.yml" \) | xargs sed 's|github.com/RobustPerception/azure_metrics_exporter|github.com/criteo-forks/azure_metrics_exporter|' -i
+  - export VERSION=$(echo $TRAVIS_TAG | sed 's/^v//')
+  - make format
+  - gofmt -s -w main.go
+  - make -j 3 multiarch
+
+before_deploy:
+  - echo "Deploying $VERSION to GitHub releases"
+  - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}_${d}.tar.gz ./pkg/bin/${d}/azure_metrics_exporter* ; done
+
+deploy:
+  provider: releases
+  api_key:
+    secure: WF7V765NcHVPLS99QxUiZJy0b3tRYIWcvnhHZULRIuPPQgTccFoVa3FlEDsK42Vxh2mCapmwYLt2U/rtAt5ZLVXq82GTb9JPdgQ4UZ4/3D23pwQuh6VVt5VFjCR9eYq3yoDurW47TxYfszkTO5Fhlg7voP8YMP8uxXWRPjBSNn3y/KRrSOPFzFMRdy0Vwvx0s06Yw3sIMdF3QVx4p1mKp9DPPxxcH6MAYO0X0LSu4hqyya4omvBExh5AhUfMoCiWY2eGIIK4J/bbcS+/XVwiqurTdCE+uMQItHw7qR4ReSORJvv2HUUDEh1ad9OaHhMU9xXcV2hhGlYXgtq5lWjrEfaYPn89YHZZb9Wev3GHSdKvXAaU1Ld1KjqtGp4Wfvx+C/PB4OSeY4LUhR8eIKFgBRSS24PENgnCS7S87WJGAwhSItfsbJc1ZFhSCfnYP5da7eHBif9kb8rPPCLCPlFejBLmyMtKHhrs1qb1ocyaF8E93A3v2Bs8f/p+DngI/HfDDlNNivTbt1MiC/Ttd+R2BDwqnPpnF0oJ/+rNrz0f3qukeIgWxGpcWIokPV1hyiHPmhlre8gVHwtpgWdTXO1qw9FJjfg3RgKH6AoptqLGmYBg3NKnbWBsipgOZnccspqhftC4XKBHbgzfGoi2Ni3ojuLGs5G7h0CftC6MsMbt558=
+  file_glob: true
+  file: azure_metrics_exporter-*.tar.gz
+  skip_cleanup: true
+  on:
+    repo: criteo-forks/azure_metrics_exporter
+    tags: true
+

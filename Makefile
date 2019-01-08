@@ -56,4 +56,19 @@ promu:
 		GOARCH=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m))) \
 		$(GO) get -u github.com/prometheus/promu
 
-.PHONY: all style format build test vet tarball docker promu
+pkg/bin/windows_amd64/azure_metrics_exporter.exe:
+	mkdir -p pkg/bin/windows_amd64
+	GOOS=windows GOARCH=amd64 go build -o pkg/bin/windows_amd64/azure_metrics_exporter.exe
+
+pkg/bin/linux_amd64/azure_metrics_exporter:
+	mkdir -p pkg/bin/linux_amd64
+	GOOS=linux GOARCH=amd64 go build -o pkg/bin/linux_amd64/azure_metrics_exporter
+
+pkg/bin/darwin_amd64/azure_metrics_exporter:
+	mkdir -p pkg/bin/darwin_amd64
+	GOOS=darwin GOARCH=amd64 go build -o pkg/bin/darwin_amd64/azure_metrics_exporter
+
+multiarch: pkg/bin/windows_amd64/azure_metrics_exporter.exe pkg/bin/linux_amd64/azure_metrics_exporter pkg/bin/darwin_amd64/azure_metrics_exporter
+
+
+.PHONY: all style format build test vet tarball docker promu multiarch

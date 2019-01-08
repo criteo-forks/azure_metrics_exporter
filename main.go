@@ -146,13 +146,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-
-	fmt.Println("Available Environment Variables")
-	for _, e := range os.Environ() {
-		pair := strings.Split(e, "=")
-		log.Println(pair[0])
-
-	}
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	if err := sc.ReloadConfig(*configFile); err != nil {
