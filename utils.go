@@ -51,7 +51,13 @@ func CreateResourceLabels(resourceID string) map[string]string {
 	}
 	labels["resource_group"] = tmp[4]
 	labels["provider"] = tmp[6]
-	labels["name"] = tmp[8]
+	if labels["provider"] == "Microsoft.Network" && tmp[7] == "networkWatchers" {
+		labels["network_watcher"] = tmp[8]
+		labels["monitor_type"] = tmp[9]
+		labels["name"] = tmp[10]
+	} else {
+		labels["name"] = tmp[8]
+	}
 	return labels
 }
 

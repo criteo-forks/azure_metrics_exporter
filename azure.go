@@ -21,38 +21,37 @@ type AzureClient struct {
 
 // NewAzureClient returns an Azure client to talk the Azure API
 func NewAzureClient() *AzureClient {
-        output := &AzureClient{}
-        output.setupAuthorizer()
+	output := &AzureClient{}
 
 	return output
 }
 
-func (ac *AzureClient) setupAuthorizer() {
-	var err error
-	ac.authorizer, err = auth.NewAuthorizerFromEnvironment()
+func (ac *AzureClient) getAuthorizer() autorest.Authorizer {
+	var authorizer, err = auth.NewAuthorizerFromEnvironment()
 	if err != nil {
 		log.Fatalf("Error getting authorizer: %v", err)
 	}
+	return authorizer
 }
 
 func (ac *AzureClient) GetSubscription(subscriptionID string) (subscriptions.Subscription, error) {
-        cacheKey := "subscription_" + subscriptionID
+	cacheKey := "subscription_" + subscriptionID
 	cachedValue, found := memcache.Get(cacheKey)
-        log.Println("Getting Subscription Information")
+	log.Println("Getting Subscription Information")
 	if found {
-                log.Println("Cached Subscription Found")
+		log.Println("Cached Subscription Found")
 		return *cachedValue.(*subscriptions.Subscription), nil
 	} else {
 		client := subscriptions.NewClient()
-                client.Authorizer = ac.authorizer
+		client.Authorizer = ac.getAuthorizer()
 		result, err := client.Get(context.Background(), subscriptionID)
 		if err != nil {
-                        log.Fatalf("Error getting subscription details: %v", err)
+			log.Fatalf("Error getting subscription details: %v", err)
 		}
 		// Subscription won't change as long as process is alive
 		memcache.Set(cacheKey, &result, cache.NoExpiration)
 
-                log.Printf("Subscription: %v", *result.ID)
+		log.Printf("Subscription: %v", *result.ID)
 		return result, nil
 	}
 }
@@ -62,7 +61,7 @@ func (ac *AzureClient) getMetricDefinitions() (map[string]insights.MetricDefinit
 
 	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
 	client := insights.NewMetricDefinitionsClient(*subscription.SubscriptionID)
-	client.Authorizer = ac.authorizer
+	client.Authorizer = ac.getAuthorizer()
 	client.AddToUserAgent("azure_prometheus_exporter")
 
 	for _, target := range sc.C.Targets {
@@ -88,7 +87,7 @@ func (ac *AzureClient) getResources(searchFilter string) ([]string, error) {
 	} else {
 
 		client := resources.NewClient(*subscription.SubscriptionID)
-		client.Authorizer = ac.authorizer
+		client.Authorizer = ac.getAuthorizer()
 		client.AddToUserAgent("azure_prometheus_exporter")
 
 		result, err := client.ListComplete(context.Background(), searchFilter, "resourceTypes/ID", nil)
@@ -103,14 +102,17 @@ func (ac *AzureClient) getResources(searchFilter string) ([]string, error) {
 			result.Next()
 
 		}
-		memcache.Set(cacheKey, &output, cache.DefaultExpiration)
+		if len(output) > 0 {
+			memcache.Set(cacheKey, &output, cache.DefaultExpiration)
+		}
+
 		return output, nil
 	}
 }
 func (ac *AzureClient) getMetricValue(metricNames []string, target config.Target, resourceID string) (insights.Response, error) {
 	// TODO: Grab the Subscription ID from wherever the Authorizer does. OR From Config File.
 	client := insights.NewMetricsClient(*subscription.SubscriptionID)
-	client.Authorizer = ac.authorizer
+	client.Authorizer = ac.getAuthorizer()
 	client.AddToUserAgent("azure_prometheus_exporter")
 	endTime, startTime := GetTimes()
 	timespan := fmt.Sprintf("%s/%s", startTime, endTime)
