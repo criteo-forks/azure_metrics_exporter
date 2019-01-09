@@ -1,21 +1,16 @@
 language: go
-
 sudo: false
 
 #go_import_path: github.com/criteo-forks/azure_metrics_exporter
 
 install: true
-
 script:
-  - make
-
-script:
-  - find . -type f \( -name "*go" -o -name ".promu.yml" \) | xargs sed 's|github.com/RobustPerception/azure_metrics_exporter|github.com/criteo-forks/azure_metrics_exporter|' -i
-  - export VERSION=$(echo $TRAVIS_TAG | sed 's/^v//')
-  - make format
-  - gofmt -s -w main.go
-  - make -j 3 multiarch
-
+- find . -type f \( -name "*go" -o -name ".promu.yml" \) | xargs sed 's|github.com/RobustPerception/azure_metrics_exporter|github.com/criteo-forks/azure_metrics_exporter|'
+  -i
+- export VERSION=$(echo $TRAVIS_TAG | sed 's/^v//')
+- make format
+- gofmt -s -w main.go
+- make -j 3 multiarch
 before_deploy:
   - echo "Deploying $VERSION to GitHub releases"
   - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}_${d}.tar.gz ./pkg/bin/${d}/azure_metrics_exporter* ; done
@@ -23,7 +18,7 @@ before_deploy:
 deploy:
   provider: releases
   api_key:
-    secure: WF7V765NcHVPLS99QxUiZJy0b3tRYIWcvnhHZULRIuPPQgTccFoVa3FlEDsK42Vxh2mCapmwYLt2U/rtAt5ZLVXq82GTb9JPdgQ4UZ4/3D23pwQuh6VVt5VFjCR9eYq3yoDurW47TxYfszkTO5Fhlg7voP8YMP8uxXWRPjBSNn3y/KRrSOPFzFMRdy0Vwvx0s06Yw3sIMdF3QVx4p1mKp9DPPxxcH6MAYO0X0LSu4hqyya4omvBExh5AhUfMoCiWY2eGIIK4J/bbcS+/XVwiqurTdCE+uMQItHw7qR4ReSORJvv2HUUDEh1ad9OaHhMU9xXcV2hhGlYXgtq5lWjrEfaYPn89YHZZb9Wev3GHSdKvXAaU1Ld1KjqtGp4Wfvx+C/PB4OSeY4LUhR8eIKFgBRSS24PENgnCS7S87WJGAwhSItfsbJc1ZFhSCfnYP5da7eHBif9kb8rPPCLCPlFejBLmyMtKHhrs1qb1ocyaF8E93A3v2Bs8f/p+DngI/HfDDlNNivTbt1MiC/Ttd+R2BDwqnPpnF0oJ/+rNrz0f3qukeIgWxGpcWIokPV1hyiHPmhlre8gVHwtpgWdTXO1qw9FJjfg3RgKH6AoptqLGmYBg3NKnbWBsipgOZnccspqhftC4XKBHbgzfGoi2Ni3ojuLGs5G7h0CftC6MsMbt558=
+    secure: Dt5ZAdqyMPFtDZIXMibDYVfCaYR8qE2yrLy6ikDW6QNaMh146DmDE0NMelwwI/HA6Mx2E/rjRo1lgs/09dmmqq77uRvheUQU0AkOfBEYOWVhgwuWHFGPubTXz/Eisk37F523+bH7Br9xYazxoFY9JbaToTTmkppMyTJwlc6sZ+Xc2LvgmBtSu5hneMBWIlmksm2GMA/+5vuU24O55VuH2bYoLhOuiHf8fY5F9i1WVquM8sSHyJfVAXI1zDBpsXynO8saw1RcW1fD31Woe77sgDSFJF1gOmrbUNuMVfX56Mng76C58YyIRygkdiP9prxcp70a2YNf7qPDDJ4yRdAS7HsSWq2YIGAQvQxlCuuePlMZ8pHfkf1qnHMy7O2Ef5JC8yFAwGxKUt6cMAUJEOelx79ysR1rNToTJI3ROEfsf+MhLjdjyTUcODdChr2ZKN0aznCs36hnAI418FjiUd3xYVEVv3pjLcifmLELyufyefNLwyTWImZvvaVnWFo0dPWCl9W/ZIaz8ar+suOds5qU6REahqkabvijlzATsgRnAGVZ3tlw2iGdofFLuibGOkHSxfktMutdF4zF4QCoQ1IJUwBZoPcat2h+E11N2lhNjIMJjFkWajDRR264upseKqYmd0BwNjAF+f4M8lH/LLD6pEQ/7MvkejQ+CHwD25U7Rcc=
   file_glob: true
   file: azure_metrics_exporter-*.tar.gz
   skip_cleanup: true
