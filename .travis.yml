@@ -13,12 +13,12 @@ script:
 - make -j 3 multiarch
 before_deploy:
   - echo "Deploying $VERSION to GitHub releases"
-  - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}_${d}.tar.gz ./pkg/bin/${d}/azure_metrics_exporter* ; done
+  - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}.${d}.tar.gz ./pkg/bin/${d}/azure_metrics_exporter* ; done
 
 deploy:
   provider: releases
   api_key:
-    secure: Dt5ZAdqyMPFtDZIXMibDYVfCaYR8qE2yrLy6ikDW6QNaMh146DmDE0NMelwwI/HA6Mx2E/rjRo1lgs/09dmmqq77uRvheUQU0AkOfBEYOWVhgwuWHFGPubTXz/Eisk37F523+bH7Br9xYazxoFY9JbaToTTmkppMyTJwlc6sZ+Xc2LvgmBtSu5hneMBWIlmksm2GMA/+5vuU24O55VuH2bYoLhOuiHf8fY5F9i1WVquM8sSHyJfVAXI1zDBpsXynO8saw1RcW1fD31Woe77sgDSFJF1gOmrbUNuMVfX56Mng76C58YyIRygkdiP9prxcp70a2YNf7qPDDJ4yRdAS7HsSWq2YIGAQvQxlCuuePlMZ8pHfkf1qnHMy7O2Ef5JC8yFAwGxKUt6cMAUJEOelx79ysR1rNToTJI3ROEfsf+MhLjdjyTUcODdChr2ZKN0aznCs36hnAI418FjiUd3xYVEVv3pjLcifmLELyufyefNLwyTWImZvvaVnWFo0dPWCl9W/ZIaz8ar+suOds5qU6REahqkabvijlzATsgRnAGVZ3tlw2iGdofFLuibGOkHSxfktMutdF4zF4QCoQ1IJUwBZoPcat2h+E11N2lhNjIMJjFkWajDRR264upseKqYmd0BwNjAF+f4M8lH/LLD6pEQ/7MvkejQ+CHwD25U7Rcc=
+    secure: BEBiikwmD4Qt2W8Tan+TDIG/lnG3+jYLIDH7EC22jcOYZg5kCM4fErmGuU+BC4vhmiX2sD+CosKhvsikZk79Lgh93Zupfae1Jt77Q2YglU97XCyvND92S48eAkfXgyHrNIu22ab74mHygVFGC3u5Wr5n+tJ+Y5hc1O6jGTvtcsiFDYhDWdFz19d4j4SyXv/uR6rvcj3948ewDr4Jr/fezQce6SptLo7J/kU0nNAKQMJvpp12Aah+SGzdeIqXwyJvxp5pZ0sBJr9u0m53SEdZEriGayQXzHEtR/3920ovG0U3owhptWtGr37jOEzOJUjhagd0qflKBoNqVhNTwmawc0u5hRcU7hgKcZpu1MIv/SsZAeEW2HNrc6FILpuiDPFGxcKT0P692ywzfAihqRreUKbEgRRrsMH/toK8yQjKYJrX2GcSuq0iZyUtGCMFkPD+iMCEMxphU2Ye2cW+0q8KIywX1YBmQOBgZm9bcj0Y7ES8ZblbMfVrIzgr4s6siOTZy+zJ0gjddbpZNQrrypDffWgspWhJ5sTdwL4ebm4pao5uxcBeZqGzLgDwLM8gYJpsfBC6ysJKjjT/BVMZtZOG0j6gVHfc/yfc/YQg9KbOcZnETQyML0764bGqzP0ds7zu2t1DvC/qUCxfJ5+7xufhWkeZ48c2lNLUX4sboZglGlo=
   file_glob: true
   file: azure_metrics_exporter-*.tar.gz
   skip_cleanup: true
