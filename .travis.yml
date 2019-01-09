@@ -13,7 +13,7 @@ script:
 - make -j 3 multiarch
 before_deploy:
   - echo "Deploying $VERSION to GitHub releases"
-  - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}.${d}.tar.gz ./pkg/bin/${d}/azure_metrics_exporter* ; done
+  - for d  in $(find ./pkg/bin -maxdepth 1 -mindepth 1 -type d | cut -d '/' -f4); do tar -czf azure_metrics_exporter-${VERSION}.${d}.tar.gz -C pkg/bin/${d} . ; done
 
 deploy:
   provider: releases
