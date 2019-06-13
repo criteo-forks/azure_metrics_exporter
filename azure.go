@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/RobustPerception/azure_metrics_exporter/config"
 	"github.com/patrickmn/go-cache"
-        "log"
+	"log"
 	"strings"
 )
 

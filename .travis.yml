@@ -1,12 +1,13 @@
 language: go
+
+go:
+- 1.12.x
 sudo: false
 
 #go_import_path: github.com/criteo-forks/azure_metrics_exporter
 
 install: true
 script:
-- find . -type f \( -name "*go" -o -name ".promu.yml" \) | xargs sed 's|github.com/RobustPerception/azure_metrics_exporter|github.com/criteo-forks/azure_metrics_exporter|'
-  -i
 - export VERSION=$(echo $TRAVIS_TAG | sed 's/^v//')
 - make format
 - gofmt -s -w main.go
